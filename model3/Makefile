@@ -1,4 +1,4 @@
-export tag=v1.0
+export tag=v2.0
 
 build:
 	echo "building httpserver binary"
@@ -10,4 +10,4 @@ release: build
 	docker build -t eachakeke/httpserver:${tag} .
 
 push: release
-	docker push eachakeke/httpserver:v1.0
+	docker push eachakeke/httpserver:${tag}
