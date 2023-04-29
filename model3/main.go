@@ -1,41 +1,79 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"homework/model3/metrics"
 	"io"
-	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
+
+	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
-	flag.Parse()
-	fmt.Println("starting http server ....")
-	c, python, java := true, false, "no!"
-	fmt.Println(c, python, java)
+	flag.Set("v", "4")
+	glog.V(2).Info("starting http server ....")
+	metrics.Register()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/hello", rootHandler)
 	mux.HandleFunc("/healthz", healthz)
-	err := http.ListenAndServe(":80", mux)
-	if err != nil {
-		log.Fatal(err)
+	mux.Handle("/metrics", promhttp.Handler())
+	srv := http.Server{
+		Addr:    ":80",
+		Handler: mux,
 	}
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			glog.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	glog.Info("Server started")
+	<-done
+	glog.Info("Server Stopped")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer func() {
+		cancel()
+	}()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		glog.Fatalf("Server Shutdown Failed:%+v", err)
+	}
+	glog.Info("Server Exited Properly")
 }
 
 func healthz(w http.ResponseWriter, r *http.Request) {
-	defer printEvent(w, r)
-	addHeader(w, r)
-	w.WriteHeader(200)
 	io.WriteString(w, "ok\n")
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-	defer printEvent(w, r)
-	addHeader(w, r)
-	w.WriteHeader(200)
-	io.WriteString(w, "root ok\n")
+	glog.V(4).Info("entering root handler")
+	timer := metrics.NewTime()
+	defer timer.ObserveTotal()
+	user := r.URL.Query().Get("user")
+	delay := randInt(10, 2000)
+	time.Sleep(time.Millisecond * time.Duration(delay))
+	if user != "" {
+		io.WriteString(w, fmt.Sprintf("Hello [%s] \n", user))
+	} else {
+		io.WriteString(w, "Hello [stranger] \n")
+	}
+	io.WriteString(w, "=========================== Details of the http request header:===================\n")
+	for k, v := range r.Header {
+		io.WriteString(w, fmt.Sprintf("%s=%s", k, v))
+	}
+	glog.V(4).Infof("Respond in %d ms", delay)
 }
 func addHeader(w http.ResponseWriter, r *http.Request) {
 	for k, v := range r.Header {
@@ -46,6 +84,11 @@ func addHeader(w http.ResponseWriter, r *http.Request) {
 func printEvent(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("client IP: %s,response code %d\n", strings.Split(r.RemoteAddr, ":")[0], 200)
 	for k, v := range w.Header() {
-		fmt.Printf("%v=%v\n", k, v)
+		glog.V(4).Infof("%v=%v\n", k, v)
 	}
+}
+
+func randInt(min int, max int) int {
+	rand.Seed(time.Now().UTC().UnixNano())
+	return min + rand.Intn(max-min)
 }

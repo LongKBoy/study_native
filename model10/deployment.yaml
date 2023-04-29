@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpserver
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: httpserver
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "80"
+      labels:
+        app: httpserver
+    spec:
+      containers:
+      - image: eachakeke/httpserver:v3.0
+        name: httpserver
+        imagePullPolicy: Always
+        ports:
+        - name: http-80
+          containerPort: 80
+        resources:
+          limits:
+            cpu: 0.2
+            memory: 200Mi
+          requests:
+            cpu: 0.1
+            memory: 100Mi
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          httpGet:
+            port: 80
+            path: /healthz
+            scheme: HTTP
+        readinessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          httpGet:
+            port: 80
+            path: /healthz
+            scheme: HTTP
+        startupProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          httpGet:
+            port: 80
+            path: /healthz
+            scheme: HTTP
