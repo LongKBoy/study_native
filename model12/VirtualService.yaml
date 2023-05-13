@@ -1,0 +1,17 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: httpsserver
+spec:
+  gateways:
+    - httpsserver
+  hosts:
+    - httpsserver.longqh.com
+  http:
+    - match:
+        - port: 443
+      route:
+        - destination:
+            host: httpserver.module12.svc.cluster.local
+            port:
+              number: 80
